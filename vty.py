@@ -21,6 +21,7 @@ class Vty(Tools):
        
         self.path = os.getcwd() + '\\'
         self.ssh_key_file = self.path +  'ssh_host_keys'
+        self.more = '--More--'
         
         
     ##### TTY Auth #####
@@ -71,6 +72,22 @@ class Vty(Tools):
         if self.verbose > 0: 
             if hide == 1: print res, '*' * len(cmd)
             else: print res,
+            
+            
+    def trim_more(self, line):
+        """ Strip out --More-- and \x08 from telnet output """
+        try:
+            try: 
+                pos = line.index(self.more)
+                start = pos + len(self.more)
+            except: start = 0
+            out = ''
+            for item in line[start:]:
+                if ord(item) != 8: 
+                    if item: out += item
+            return out
+            
+        except: return line
        
        
     def telnet_cmd(self, cmd):
@@ -82,7 +99,8 @@ class Vty(Tools):
             self.telcon.write(' ')
             out += '\r\n'
             res = self.telcon.expect(self.telnet_banner_list, self.telnet_cmd_timeout)
-            out += res[2]
+            #print res
+            out += self.trim_more(res[2])
        
         #if self.verbose > 0: print out
         return out
@@ -107,7 +125,8 @@ class Vty(Tools):
         res = self.telcon.read_until('zzz', 1)
         if not res: return
         bt_host = ['san-b', 'san-h', 'san-t', 'ab-h', 'san-d', 'ab-bbg', 'alg-1004', 'alg-1002', 'alg-1003', 'alg-1004', 'alg-1005', 'alg-1009', 'alg-101']
-        bt_banner = [' bt ', 'british', 'telecommunications']
+        bt_banner = [' bt ', 'british', 'telecommunications', 'bt', 'british', 'telecommunications']
+        prod_banner = ['prod', 'grupo']
         
         for item in bt_banner:
             if item in res.lower():
@@ -121,10 +140,11 @@ class Vty(Tools):
                 if self.verbose > 0: print 'BT Cisco Telnet Detected'
                 return
             
-        if 'PROD' in res or 'Prod' in res or 'GRUPO' in res:
-            self.auth_produban()
-            if self.verbose > 0: print 'Produban Cisco Telnet Detected'
-            return
+        for item in prod_banner:
+            if item in res.lower():
+                self.auth_produban()
+                if self.verbose > 0: print 'Produban Cisco Telnet Detected'
+                return
 
       
     def telnet_go(self, cmd_list='sh snmp loc', ip='', port='', test=1):
