@@ -9,7 +9,7 @@ class Tools():
   
     def var(self): print self.tree_var()
   
-    def cmd(self): print self.tree_method()
+    def cmds(self): print self.tree_method()
       
     def ls(self): self.view(dir(self))
    
