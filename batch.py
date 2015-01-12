@@ -36,6 +36,7 @@ class Batch(Tools):
         self.ip = ''
         self.host = ''
         self.res = ''
+        self.transform_label = ''
         
         
         #info obtained from sh ver in self.vty_sh_ver()
@@ -48,7 +49,8 @@ class Batch(Tools):
             'sh mac add ': ['vlan', 'mac address', 'type', 'protocols', 'port'],
             'sh mac-add': ['star', 'vlan', 'mac address', 'type', 'learn', 'age', 'ports'],
             'sh int desc': ['Interface', 'Status', 'Protocol', 'Description'],
-            'sh ver': ['hostname', 'serial_number', 'reload_cause']
+            'sh ver': ['hostname', 'serial_number', 'reload_cause'],
+            'sh cdp n d': ['hostname', 'ip', 'interface', 'port']
         }
         
         #describe the matching rule format to identify valid output - i.e. match word in pos
@@ -61,7 +63,8 @@ class Batch(Tools):
             'sh int desc': ['up', 1],
             'ios': ['uptime', 0, 'processor board id', 3, 'system returned to rom by', 5],
             'catos': ['sh ver', 0, 'hardware version:', -1, 'system returned to rom by', 5],
-            'nxos': ['device name', 2, 'processor', 3, 'reason:', 1]
+            'nxos': ['device name', 2, 'processor', 3, 'reason:', 1],
+            'sh cdp n d': ['device id', 2, 'ip address', 2, 'interface:', 1, 'port id', 6]
         }
     
     
@@ -72,6 +75,7 @@ class Batch(Tools):
         """
         self.cmd_transform['sh mac add '] = ['star', 'vlan', 'mac address', 'type', 'age', 'secure', 'ntfy', 'port']
         self.cmd_rules['sh mac add '] = ['dynamic', 3]
+        self.cmd_rules['sh cdp n d'] = ['system name:', 2, 'ipv4 address', 2, 'interface:', 1, 'port id', 6]
     
     
     def init_ios(self):
@@ -310,40 +314,55 @@ class Batch(Tools):
         
     def find_host(self, ip):
         """
-        Find the hostname via the cli class function verify_ip which returns ip, hostname
+        help: Find the hostname via the cli class function verify_ip
+        usage: batch find_host(ip)
+        example: batch find_host('172.22.25.132')
+        output is hostname if a unique match or ip gets returned back
         """
         return self.cli_con.verify_ip(ip)[1]
         
         
     def find_arp(self, ip):
         """
-        Look for an arp entry in the db and return the record in format host, interface, ip_mac
-        ('dswpcain01', 'Vlan21', '107.22.21.56_0050.56b5.1a6b')
+        help: Look for an arp entry in the db and return the record if it exists
+        usage: batch find_arp(ip)
+        example: batch find_arp('107.22.21.56')
+        output is host, interface, ip_mac - ('dswpcain01', 'Vlan21', '107.22.21.56_0050.56b5.1a6b')
         """
         return self.cli_con.arp_con.search_ip(ip)
         
     
     def find_port(self, ip , host): 
         """
-        Find the port via the cli class function which returns text type, port number - i.e. bt, 23
+        help: Find the port and auth type via the cli class function
+        usage: batch find_port(ip, host)
+        example: batch find_port('172.22.25.132', 'san-b0025-rtr-01')
+        output is text type, port number - i.e. (bt, 23)
         """
-        return self.cli_con.test_session(host, ip)[1]
+        return self.cli_con.test_session(host, ip)
         
 
     def vty_connect(self, ip='', host='', cmd='', verbose=1):
+        """
+        abstraction to the vty session - not for normal use
+        test usage: batch vty_connect('172.22.25.132', 'san-b0025-rtr-01', 'sh ver', 2)
+        output is a list containing csv text
+        """
         if not ip: ip = self.find_ip(host)
         if not host: host = self.find_host(ip)
         if verbose > 0: print 'connecting to %s with %s' % (host, ip)
-        port = self.find_port(ip, host)
+        port = self.find_port(ip, host)[1]
         time.sleep(self.time_wait)
         self.vty_out = self.cli_con.vty_session(ip, host, port, cmd)
-        #if len(self.vty_out) == 1: self.vty_out = self.vty_out[0]    #telnet format fix
+        if len(self.vty_out) == 1: self.vty_out = self.vty_out[0]    #telnet format fix
+        if verbose > 1: print self.vty_out
         
     
     def find_cmd_key(self, cmd):
         """
         Step through the cmd one char at a time until a unique cmd_transform key match is found
-        batch trans key test sh mac address-table address 000b.5de3.7ee6
+        test usage: batch find_cmd_key('sh mac address-table address 000b.5de3.7ee6')
+        output is the command key - i.e. sh mac address-table
         """
         for pos in range(4, len(cmd)):
             key = [x for x in self.cmd_transform.keys() if cmd[:pos] in x]
@@ -355,19 +374,20 @@ class Batch(Tools):
         use cmd_transform and cmd_rules to determine which rows to process and return
         """
         cmd_key = self.find_cmd_key(cmd)
-        print cmd_key
+        if verbose > 1: print cmd_key
         transform = self.cmd_transform[cmd_key]
         rule_txt = self.cmd_rules[cmd_key][0]
         rule_pos = self.cmd_rules[cmd_key][1]
-        print transform
-        print rule_txt
+        if verbose > 1: print transform
+        if verbose > 1: print rule_txt
         out = []
         self.vty_connect(ip=ip, host=host, cmd=cmd, verbose=1)
         if len(self.vty_out) == 1: self.vty_out = self.vty_out[0]    #telnet format fix
         for rows in self.vty_out:
             try:
-                print rows
-                row = rows.split()    ; print row
+                if verbose > 1: print rows
+                row = rows.split()
+                if verbose > 1: print row
                 if len(row) != len(transform): continue
                 if row[rule_pos].lower() != rule_txt: continue
                 out.append(row)
@@ -376,52 +396,88 @@ class Batch(Tools):
         
         
     def vty_sh_ver(self, ip):
-       """
-       information capture via sh ver command
-       batch vty sh ver 172.22.25.132    #ios     
-       batch vty sh ver 22.99.29.132    #nx-os
-       batch vty sh ver 172.22.37.180    #catos
-       """
+        """
+        help: information capture via sh ver command
+        usage: batch vty sh ver [IP]
+        example: batch vty sh ver 172.22.25.132    #ios     
+        example: batch vty sh ver 22.99.29.132    #nx-os
+        example: batch vty sh ver 172.22.37.180    #catos
+        output is ['hostname', 'serial_number', 'reload_cause']
+        """
+        self.init_sh_ver()
+        cmd = 'sh ver'
+        
+        self.vty_connect(ip=ip, host='', cmd=cmd, verbose=1)
+        
+        #detect os and setup the custom transforms
+        self.vty_os = self.vty_id_os(self.vty_out)
+        self.vty_set_transform(self.vty_os)
+        
+        transform = self.cmd_rules[self.vty_os]
+        cmd_transform = self.cmd_transform[cmd]
+         
+        return self.vty_parse_list(transform, cmd_transform)
        
-       self.init_sh_ver()
-       cmd = 'sh ver'
-       self.vty_connect(ip=ip, host='', cmd=cmd, verbose=1)
-       if len(self.vty_out) == 1: self.vty_out = self.vty_out[0]    #telnet format fix
        
-       #detect os and setup the custom transforms
-       self.vty_os = self.vty_id_os(self.vty_out)
-       self.vty_set_transform(self.vty_out)
-       
-       transform = self.cmd_rules[self.vty_os]
-       cmd_transform = self.cmd_transform[cmd]
-       
-       print self.vty_os
-       print transform
-       print cmd_transform
+    def vty_list_cmd(self, ip, cmd, verbose=1):
+        """
+        help: capture from commands which display a list output
+        usage: batch vty_list_cmd(ip, cmd)
+        example(IOS): batch vty_list_cmd(ip='172.22.25.132', cmd='sh cdp n d', verbose=2)
+        example(NXOS): batch vty_list_cmd(ip='22.99.29.132', cmd='sh cdp n d', verbose=2)
+        
+        """
+        self.vty_connect(ip=ip, host='', cmd=cmd, verbose=1)
+        if verbose > 2: print self.vty_out
+        
+        cmd_key = self.find_cmd_key(cmd)
+        if verbose > 1: print cmd_key
+        
+        transform = self.cmd_rules[cmd_key]
+        if verbose > 1: print transform
+        
+        cmd_transform = self.cmd_transform[cmd_key]
+        if verbose > 1: print cmd_transform
 
-       return self.vty_parse_list(transform, cmd_transform)
-       
-       
-    def vty_parse_list(self, transform, cmd_transform):
+        return self.vty_parse_list(transform, cmd_transform)
+        
+        
+
+    def vty_parse_list(self, transform, cmd_transform, verbose=1):
         """
         Parse a list of data using the data definition in transform
         data is already collected and located in self.vty_out
         pass in the cmd_transform list as out so the data can be placed in correct list index
         """
-        out = range(len(cmd_transform))
-        
+        out = []
+        insert_count = 0
+        entry = range(len(cmd_transform))
         end = len(transform) -1
-        for rows in self.vty_out:
+        
+        for row in self.vty_out:
+            if verbose > 3: print row
             pos = 0
-            key = 0    #index pos for out
+            key = 0    #index pos for entry
+            
             while pos < end:
                 try:
-                    if transform[pos] in rows.lower(): 
-                        out.pop(key)
-                        out.insert(key, rows.split()[transform[pos+1]])
+                    if transform[pos] in row.lower(): 
+                        if verbose > 2: print transform[pos], transform[pos+1]
+                        if verbose > 2: print row.split(), row.split()[transform[pos+1]]
+                        entry.pop(key)
+                        entry.insert(key, row.split()[transform[pos+1]])
+                        insert_count += 1
+                        if verbose > 2: print insert_count
                 except: pass
                 pos += 2
                 key += 1
+            
+            if insert_count == len(cmd_transform):
+                if verbose > 2: print entry
+                out.append(entry)
+                entry = range(len(cmd_transform))
+                insert_count = 0
+        if verbose > 0: print out
         return out
          
        
@@ -429,6 +485,7 @@ class Batch(Tools):
         """
         Read the output from the sh ver command in vty_out and look for the following words
         IOS, NX-OS or NmpSW (CAToS)
+        example: batch vty_id_os(['ios'])
         """
         for row in vty_out:
             if 'ios' in row.lower(): return 'ios'
@@ -439,17 +496,28 @@ class Batch(Tools):
     def vty_set_transform(self, vty_os):
         """
         setup the transform dict for the OS
+        example: batch vty_set_transform('nxos')
+        example batch view(self.cmd_transform)
         """
         if vty_os == 'nxos': self.init_nexus()
         if vty_os == 'ios': self.init_ios()
        
         
-    def vty_test_arp(self, ip):    #batch vty test arp 172.22.25.132     107.22.28.6
+    def vty_arp(self, ip):    #batch vty test arp 172.22.25.132     107.22.28.6
+        """
+        help: perfrom a sh ip arp on a device a parse the output
+        usage: batch arp [IP]
+        example: batch arp 22.98.163.2
+        """
         return self.vty_parse(ip=ip, host='', cmd='sh ip arp', verbose=1)
         
         
     def vty_test_cmd(self, ip, cmd):    
         """
+        help: test for unspecified commands
+        usage: batch vty test cmd [command],[IP]
+        
+        examples:
         #arp entry tests
         batch vty test cmd sh ip arp 107.22.21.128,107.22.28.6    #1 - 0050.56b5.29ac
         batch vty test cmd sh ip arp 10.6.36.189,10.13.251.82
@@ -478,13 +546,91 @@ class Batch(Tools):
     def vty_sh_int_desc(self, ip):
         """
         help: Perform a sh int desc
-        usage: batch run vty_sh_int_desc(ip)
-        example: vty_sh_int_desc 10.1.1.1
+        usage: batch vty_sh_int_desc(ip)
+        example: batch vty_sh_int_desc('172.22.25.132')
         
         Used a fixed width parse based on the label as below
         Interface                      Status         Protocol Description
         """
-        pass
+        return self.vty_fixed_width_parse(ip, cmd='sh int desc')
+        
+        
+    def vty_fixed_width_parse(self, ip, cmd, verbose=1):
+        """
+        help: fixed width parsing based on recording the starting index position of the column label
+        usage: batch vty_fixed_width_parse(ip, cmd)
+        example: batch vty_fixed_width_parse(ip='172.22.25.132', cmd='sh int desc', verbose=3)
+        
+        example column label: Interface                      Status         Protocol Description
+        example transform: ['Interface', 'Status', 'Protocol', 'Description']
+        example transform_rules: {'Interface': 0, 'Status': 31, 'Protocol': 46, 'Description': 55}
+        """
+        out = {}
+        cmd_key = self.find_cmd_key(cmd)
+        if verbose > 1: print cmd_key
+        
+        transform = self.cmd_transform[cmd_key]
+        if verbose > 1: print transform
+        
+        self.vty_connect(ip=ip, host='', cmd=cmd, verbose=1)
+        if verbose > 2: print self.vty_out
+        
+        transform_rules = self.vty_transform_index(transform)
+        if verbose > 1: print transform_rules
+        
+        row_num = 0
+        for row in self.vty_out:
+            if verbose > 2: print row
+            if row == self.transform_label: continue    #ignore the column label
+            if len(row) < len(self.transform_label): continue    #ignore too short
+            try:
+                
+                pos = 0
+                out[row_num] = {}
+                for item in transform:
+                    if verbose > 2: print item
+                    
+                    start = transform_rules[item]
+                    if verbose > 2: print start
+                    
+                    try: 
+                        next_item = transform[pos+1]
+                        end = transform_rules[next_item] - 1
+                    except: end = len(row)
+                    if verbose > 2: print end
+
+                    if verbose > 2: print row[start:end]
+                    
+                    out[row_num][item] = row[start:end].lstrip().rstrip()
+                    if verbose > 2: print out[row_num][item]
+                    pos += 1
+
+                row_num += 1
+            except: pass
+
+        return out
+        
+        
+    def vty_transform_index(self, transform, verbose=1):
+        """
+        help: find the starting index positions for the item in the transform list
+        usage: batch vty_transform_index(transform, verbose=2)
+        example: batch vty_transform_index(['Interface', 'Status', 'Protocol', 'Description'], verbose=2)
+        output is a dict - {'Interface': 0, 'Status': 31, 'Protocol': 46, 'Description': 55}
+        """
+        out = {}
+        for rows in self.vty_out:
+            if verbose > 2: print rows
+            if transform[0] in rows:
+                try: 
+                    for item in transform:
+                        if verbose > 1: print item, rows.index(item)
+                        out[item] = rows.index(item)    #get the start point for each item
+                    self.transform_label = rows    #record the column label so it can be identified by the parser
+                    return out
+                except: pass
+        
+                
         
         
     def help(self):
@@ -511,8 +657,7 @@ class Batch(Tools):
             if ')' not in cmd: cmd += '()'
             print 'executing self.' + cmd
             try: 
-                exec('self.res = self.' + cmd)
-                if self.verbose > 0: self.view(self.res)
+                exec('print self.' + cmd)
             except: pass
             
         
@@ -586,10 +731,9 @@ class Batch(Tools):
         
         if 'batch set tcp port ' in q: self.set_tcp_port(q[19:]) ; q = ''
         
+        if 'batch arp ' in q: print self.vty_arp(q[10:]) ; q = ''
         
-        if 'batch vty test arp ' in q: print self.vty_test_arp(q[19:]) ; q = ''
-        
-        if 'batch trans key test ' in q: print self.find_cmd_key(q[21:])
+        if len(q) < 10 and 'vty' in q or 'tty' in q: return self.batch_vty()
             
         if 'batch vty test cmd ' in q:
             ip = q.split(',')[1]
@@ -597,8 +741,6 @@ class Batch(Tools):
             print self.vty_test_cmd(ip, cmd) ; q = ''
         
         if 'batch vty sh ver ' in q: print self.vty_sh_ver(q[17:]) ; q = ''
-        
-        if 'vty' in q or 'tty' in q: return self.batch_vty()
         
         if 'batch test find arp' in q: print self.find_arp(q[20:])
         
