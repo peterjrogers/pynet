@@ -3,21 +3,22 @@ from subprocess import Popen, PIPE
 from tools import Tools
 
 class Net(Tools):
-    def __init__(self, ip='192.168.1.10', name='test', port=23):
+    def __init__(self, ip='192.168.1.10', name='test', port=23, verbose=1):
         Tools.__init__(self)
         """
         Network tool kit
-        Tested on Win XP with Python 2.7
-        (c) 2012 - 2014 Intelligent Planet Ltd
+        1) Methods from the socket library are presented with descriptions from the man page https://docs.python.org/2/library/socket.html
+        
+        
+        (c) 2012 - 2015 Intelligent Planet Ltd
         """
         
         self.init_net(ip, name, port)
                
-        self.timeout = 0.2
         self.sleep = 0.1
-        self.verbose = 1
+        self.verbose = verbose
        
-        self.buffers = 1024
+        self.recv_buffer = 1024
         self.error = 'fail'
         
         self.web_proxy = '172.19.193.122'
@@ -31,42 +32,148 @@ class Net(Tools):
         
         
     def init_net(self, ip, name, port):
+        """
+        help: re-initialize the input values for the class
+        usage: init_net(ip, name, port)
+        example: init_net(ip='192.168.1.1', name='test', port=23)
+        """
         self.ip = ip
         self.host_name = name
         self.port = port
        
        
-    def socket_open(self, port, ip):
+    def socket_open(self, port, ip, timeout=0.2):
+        """
+        help: open a socket with the set timeout and reference as self.sock
+        usage: socket_open(port, ip, timeout)
+        example: socket_open(port=23, ip='192.168.1.1', timeout=0.5)
+        output is null for normal operation
+        """
         try:
             self.sock = socket.socket()
-            self.sock.settimeout(self.timeout)
-            self.sock.connect((ip, port))
+            self.socket_set_timeout(timeout)
+            self.socket_connect(ip, port)
         except socket.error, e: return (self.error, 'socket_open', e)
+        
+        
+    def socket_set_timeout(self, timeout):
+        """
+        help: set the socket timeout in seconds (float)
+        Set a timeout on blocking socket operations. The value argument can be a nonnegative float expressing seconds, or None. If a float is given, subsequent socket operations will raise a timeout exception if the timeout period value has elapsed before the operation has completed. Setting a timeout of None disables timeouts on socket operations. s.settimeout(0.0) is equivalent to s.setblocking(0); s.settimeout(None) is equivalent to s.setblocking(1)
+        usage: socket_set_timeout(timeout)
+        example: socket_set_timeout(0.5)
+        """
+        try: self.sock.settimeout(timeout)
+        except socket.error, e: return (self.error, 'socket_set_timeout', e)
+        
+        
+    def socket_get_timeout(self):
+        """
+        help: Return the timeout in seconds (float) associated with socket operations, or None if no timeout is set.
+        usage: socket_get_timeout()
+        """
+        try: return socket.gettimeout()
+        except socket.error, e: return (self.error, 'socket_get_timeout', e)
+        
+        
+    def socket_connect(self, ip, port):
+        """
+        help: Connect to a remote socket at address in the form (ip, port) Note: ip, port format is Tuple.
+        usage: socket_connect(ip, port)
+        example: socket_connect(ip='192.168.1.1', port=23)
+        """
+        try: self.sock.connect((ip, port))
+        except socket.error, e: return (self.error, 'socket_connect', e)
        
        
     def socket_close(self):
+        """
+        Help: Close the socket. All future operations on the socket object will fail. The remote end will receive no more data (after queued data is flushed). Sockets are automatically closed when they are garbage-collected.
+        usage: socket_close()
+        """
         try: self.sock.close()
         except: pass
        
        
-    def socket_peer_name(self):
+    def socket_get_peer_name(self):
+        """
+        help: Return the remote address to which the socket is connected. This is useful to find out the port number of a remote IPv4/v6 socket, for instance.
+        usage: socket_get_peer_name()
+        """
         try: return self.sock.getpeername()
-        except socket.error, e: return (self.error, 'socket_peer_name', e)
-       
-       
+        except socket.error, e: return (self.error, 'socket_get_peer_name', e)
+        
+        
+    def socket_get_sock_name(self):
+        """
+        help: return the socket's own address. This is useful to find out the port number of an IPv4 / v6 socket.
+        usage: socket_get_sock_name()
+        """
+        try: return self.sock.getsockname()
+        except socket.error, e: return (self.error, 'socket_get_sock_name', e)
+        
+        
+    def socket_get_fqdn(self, name=''):
+        """
+        help: Return a fully qualified domain name for name. If name is omitted or empty, it is interpreted as the local host. To find the fully qualified name, the hostname returned by gethostbyaddr() is checked, followed by aliases for the host, if available. The first name which includes a period is selected. In case no fully qualified domain name is available, the hostname as returned by gethostname() is returned.
+        usage: socket_get_fqdn(name='4.4.4.4')
+        """
+        try: return socket.getfqdn(name)
+        except socket.error, e: return (self.error, 'socket_get_fqdn', e)
+        
+        
+    def socket_get_host_by_name(self, hostname):
+        """
+        help: Translate a host name to IPv4 address format, extended interface. Return a triple (hostname
+        aliaslist, ipaddrlist) where hostname is the primary host name responding to the given ip_address,
+        aliaslist is a (possibly empty) list of alternative host names for the same address, and ipaddrlist is a
+        list of IPv4 addresses for the same interface on the same host (often but not always a single address). .
+        usage: socket_get_host_by_name(name='www.google.com')
+        output is (hostname, aliaslist, ipaddrlist)
+        """
+        try: return socket.gethostbyname_ex(hostname)
+        except socket.error, e: return (self.error, 'socket_get_host_by_name', e)
+        
+        
     def socket_recv(self):
-        try: return self.sock.recv(self.buffers)
+        """
+        help: Receive data from the socket. The return value is a string representing the data received. The maximum amount of data to be received at once is specified by self.recv_buffer
+        usage: self.sock.recv(self.recv_buffer)
+        """
+        try: return self.sock.recv(self.recv_buffer)
         except socket.error, e: return (self.error, 'socket_recv', e)
        
        
     def socket_send(self, data):
-        try: self.sock_sent_bytes = self.sock.send(data)
+        """
+        help: Send data to the socket. The socket must be connected to a remote socket. The optional flags argument has the same meaning as for recv() above. Returns the number of bytes sent. Applications are responsible for checking that all data has been sent; if only some of the data was transmitted, the application needs to attempt delivery of the remaining data.
+        usage: socket_send(data)
+        output is the number of bytes sent
+        """
+        try: return self.sock.send(data)
         except socket.error, e: return (self.error, 'socket_send', e)
+        
+        
+    def socket_shutdown(self, how):
+        """
+        help: Shut down one or both halves of the connection. If how is SHUT_RD, further receives are disallowed. If how is SHUT_WR, further sends are disallowed. If how is SHUT_RDWR, further sends and receives are disallowed. Depending on the platform, shutting down one half of the connection can also close the opposite half (e.g. on Mac OS X, shutdown(SHUT_WR) does not allow further reads on the other end of the connection).
+        usage: socket_shutdown(how='SHUT_WR')
+        output is On success, zero is returned. On error, -1 is returned
+        """
+        try: return self.sock.shutdown(how)
+        except socket.error, e: return (self.error, 'socket_shutdown', e)
        
        
     def test_http(self, port, ip):
+        """
+        help: connect to a remote port and collect data by using http methods
+        usage: test_http(port, ip)
+        output is the data returned from the remote http server or details of the connection error
+        """
+        #open the connection
         error = self.socket_open(port, ip)
         if error: return error
+        #make a get request to the server
         self.socket_send(self.http_get)
         self.socket_send(self.http_host % (self.ip))
         return self.socket_recv()
@@ -78,9 +185,10 @@ class Net(Tools):
         usage: test_port(port, ip, send)    #send is optional
         example: test_port(80, '4.4.4.4')
         """
+        #open the connection
         error = self.socket_open(port, ip)
         if error: return error
-        time.sleep(self.sleep)
+        #send data and return the data read from the socket
         if send:
             self.socket_send(send)
             time.sleep(self.sleep)  
@@ -88,35 +196,45 @@ class Net(Tools):
         
         
     def test_port_front(self, port, ip, send=''):
+        """
+        help: front end function to implement custom behaviour for protocols - i.e. http
+        usage: test_port_front(port=80, ip='192.168.1.1', send='')
+        """
         if port == 80: print 'http test' ; return self.test_http(port, ip)
         return self.test_port(port, ip)
        
        
-    def test_ping(self, ip, ttl=255, count=1, timeout=300, size=32):
+    def test_ping(self, ip, ttl=255, count=1, timeout=300, size=32, verbose=1):
+        """
+        help: ping test function that uses the windows command line ping tool and parses the output text
+        usage: batch test_ping(ip='172.22.25.135', ttl=255, count=1, timeout=300, size=32, verbose=3)
+        output is (ip, ping_sent, ping_recv, ping_delay, ping_ttl, ping_reply)
+        """
+        #run the command
         cmd = "p = Popen('ping -n %s -w %s -i %s -l %s %s', stdout=PIPE)" % (count, timeout, ttl, size, ip)
         exec(cmd)
         
-        self.ping_result = p.stdout.read()
-       
-        m = re.search('Sent = ([0-9]+),', self.ping_result)
-        if m: self.ping_sent = int(m.group(1))
-        
-        m = re.search('Received = ([0-9]+),', self.ping_result)
-        if m: self.ping_recv = int(m.group(1))
-        
-        m = re.search('TTL=([0-9]+)', self.ping_result)
-        if m: self.ping_ttl = int(m.group(1))
-        else: self.ping_ttl = ''
-        
-        m = re.search('Reply from ([0-9.]+):', self.ping_result)
-        if m: self.ping_reply = (m.group(1))
-        else: self.ping_reply = ''
-        
-        m = re.search('Minimum = ([0-9]+)ms', self.ping_result)
-        if m: self.ping_delay = int(m.group(1))
-        else: self.ping_delay = ''
-       
-        return 'Ping statistics for %s\n sent %s  recv %s  delay %s  ttl %s  reply from %s' % (ip, self.ping_sent, self.ping_recv, self.ping_delay, self.ping_ttl, self.ping_reply)
+        #get the result from stout
+        rows = p.stdout.read().split('\n')
+        if verbose > 1: print rows
+        ttl = '' ; delay = '' ; reply = '' ; recv = ''
+        #parse the text
+        for row in rows:
+            if verbose > 0: print row
+            
+            res = row.split()
+            if verbose > 2: print res
+            
+            if 'Packets:' in row:    #Packets: Sent = 4, Received = 0, Lost = 4 (100% loss),
+                recv = res[6].strip(',')
+            
+            if 'Reply from' in row:    #Reply from 172.22.25.132: bytes=32 time=10ms TTL=247
+                ttl = int(res[-1][4:])
+                delay = int(res[4][5:].strip('ms'))
+                reply = res[2].strip(':')
+             
+        print (ip, count, recv, delay, ttl, reply)
+        return ip, count, recv, delay, ttl, reply
        
        
     def dns_rlook(self, ip=''):
