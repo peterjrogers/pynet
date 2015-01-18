@@ -1,9 +1,13 @@
-from tools import Tools
 import time, os
+from tools import Tools
+from net import Net
 
-class Batch(Tools):
+
+
+class Batch(Tools, Net):
     def __init__(self, dev_con='', cli_con=''):
         Tools.__init__(self)
+        Net.__init__(self)
         
         """
         Batch processing tools
@@ -173,11 +177,13 @@ class Batch(Tools):
     def process_ping(self, res_dict):
         """
         used to display the result of the batch ping command
-        format of return from mnet ping function is 172.22.117.1 (1, 1, 2, 241, '172.22.117.1')
+        format of return from mnet ping function is output is (ip, sent, recv, delay, ttl, reply)
+        172.22.117.1 (1, 1, 2, 241, '172.22.117.1')
         we make it look like this: 
         san-b0025-rtr-01     172.22.25.132   Recv: 0  Delay: timed out   From: -                Result: fail
         """
         self.host_result = {}
+        host_space = self.get_host_space()
         for ip in res_dict:
             host = self.host_dict[ip]
             output = res_dict[ip]
@@ -185,15 +191,27 @@ class Batch(Tools):
             delay = str(output[2])
             reply_from = output[4]
             ping_result = self.ping_success(recv, ip, reply_from)
-            print '%s%s %s%s Recv: %d  Delay: %s%s  From: %s%s  Result: %s' % (host, self.space(host, 20), ip, self.space(ip, 15), recv, delay, self.space(delay, 10), reply_from, self.space(reply_from, 15), ping_result)
+            print '%s%s %s%s Recv: %s  Delay: %s%s  From: %s%s  Result: %s' % (host, self.space(host, host_space), ip, self.space(ip, 15), recv, delay, self.space(delay, 10), reply_from, self.space(reply_from, 15), ping_result)
             self.host_result[host] = ping_result
-                        
+            
+            
+    def get_host_space(self):
+        """
+        get the max length for a host entry
+        """
+        max = 0
+        for key in self.host_dict.keys():
+            res = len(self.host_dict[key])
+            if res > max: max = res
+        return max
+
+        
             
     def ping_success(self, recv, ip, reply_from):
         """
         Test that a packet is received from the target and not an intermediate router i.e. expired in transit
         """
-        if recv == 1 and ip == reply_from: return 'ok'
+        if recv == '1' and ip == reply_from: return 'ok'
         else: return 'fail'
         
         
@@ -202,13 +220,13 @@ class Batch(Tools):
         help: perform a multi threaded ping on the hosts in the batch host list
         usage: batch ping     
         """
-        try:
-            self.make_ip_list()
-            self.ping_dict = self.mnet_con.mt_ping(self.ip_list)
-            self.process_ping(self.ping_dict)
-        except: print 'error - use batch add to define a list of hosts to ping'
-    
+        #try:
+        self.make_ip_list()
+        self.ping_dict = self.mnet_con.mt_ping(self.ip_list)
+        self.process_ping(self.ping_dict)
+        #except: print 'error - use batch add to define a list of hosts to ping'
         
+
     def trace(self):
         """
         help: Run a multi threaded trace route and store the result in trace_dict
@@ -656,9 +674,9 @@ class Batch(Tools):
         else:
             if ')' not in cmd: cmd += '()'
             print 'executing self.' + cmd
-            try: 
-                exec('print self.' + cmd)
-            except: pass
+            #try: 
+            exec('print self.' + cmd)
+            #except: pass
             
         
   
