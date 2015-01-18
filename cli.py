@@ -152,9 +152,9 @@ class Cli(Tools):
                     
                 if 'ehealth ' in res:    #run an ehealth report conversion
                     if 'internet' in res:    #fetch the data for Peter Ortlepp's report
-                        url = 'http://x.x.x.x/users/guest/myHealth/myHealth.csv'
-                        username = ''
-                        password = ''
+                        url = 'http://22.98.33.26/users/guest/myHealth/myHealth.csv'
+                        username = 'guest'
+                        password = 'guest'
                     else: 
                         ehealth_split = res_copy.split(' ')    #keep the char case
                         if len(ehealth_split) != 4: 
