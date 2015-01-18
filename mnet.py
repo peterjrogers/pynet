@@ -32,7 +32,7 @@ class Mnet(Net, Tools):
         
     def mt_base(self, label, cmd):
         self.pos = 0
-        self.sleep = 0.02    #0.01 limits requests to 100 per second on dns servers
+        self.sleep = 0.005    #0.01 limits requests to 100 per second on dns servers
         self.out = {}
         self.label = label
         self.cmd = cmd
@@ -147,7 +147,7 @@ class Mnet(Net, Tools):
                
             return res
 
-        
+    """    
     def test_ping(self, ip):    #self.ping_count, self.timeout, self.ttl, self.ip
         self.ping_sent = self.ping_recv = self.ping_delay = self.ping_reply = self.ping_ttl = 0
         cmd = "p = Popen('ping -n %s -w %s -i %s -l %s %s', stdout=PIPE)" % (self.ping_count, self.ping_timeout, self.ttl, self.ping_size, ip)
@@ -176,6 +176,35 @@ class Mnet(Net, Tools):
         if self.verbose > 3: print self.ping_result
         if self.verbose > 1: print '\nPing statistics for %s\n sent %s  recv %s  delay %s  ttl %s  reply from %s' % (ip, self.ping_sent, self.ping_recv, self.ping_delay, self.ping_ttl, self.ping_reply)
         return ip, self.ping_sent, self.ping_recv, self.ping_delay, self.ping_ttl, self.ping_reply
+    """
+        
+        
+    def test_ping(self, ip, ttl=255, count=1, timeout=300, size=32, verbose=1):
+        """
+        help: ping test function that uses the windows command line ping tool and parses the output text
+        usage: batch test_ping(ip='172.22.25.132', ttl=255, count=1, timeout=300, size=32, verbose=3)
+        output is (ip, sent, recv, delay, ttl, reply)
+        """
+        #run the command
+        cmd = "p = Popen('ping -n %s -w %s -i %s -l %s %s', stdout=PIPE)" % (count, timeout, ttl, size, ip)
+        exec(cmd)
+        
+        #get the result from stout
+        rows = p.stdout.read().split('\n')
+        ttl = '-' ; delay = '-' ; reply = '-' ; recv = '-'
+        #parse the text
+        for row in rows:            
+            res = row.split()
+            
+            if 'Packets:' in row:    #Packets: Sent = 4, Received = 0, Lost = 4 (100% loss),
+                recv = res[6].strip(',')
+            
+            if 'Reply from' in row:    #Reply from 172.22.25.132: bytes=32 time=10ms TTL=247
+                ttl = res[-1][4:]
+                delay = res[4][5:].strip('ms')
+                reply = res[2].strip(':')
+
+        return ip, count, recv, delay, ttl, reply
         
     
     def check_port(self, ip, port):
