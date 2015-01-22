@@ -8,7 +8,7 @@ class Net(Tools):
         """
         Network tool kit
         1) Methods from the socket library are presented with descriptions from the man page https://docs.python.org/2/library/socket.html
-        
+        2) ping function using the windows cmd line parse method
         
         (c) 2012 - 2015 Intelligent Planet Ltd
         """
