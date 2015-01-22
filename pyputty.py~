@@ -10,7 +10,6 @@ class Putty():
         putty.exe [-ssh | -telnet | -rlogin | -raw] [user@]host
 
         e.g. c:\Temp\python_27>putty -ssh 22.98.162.114
-        (c) 2012 - 2015 Intelligent Planet Ltd
         """
         
         #passed in class values
