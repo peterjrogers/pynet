@@ -9,7 +9,6 @@ class Net(Tools):
         Network tool kit
         1) Methods from the socket library are presented with descriptions from the man page https://docs.python.org/2/library/socket.html
         2) ping function using the windows cmd line parse method.
-        3) Trace Route function based on the ping function described above.
         
         (c) 2012 - 2015 Intelligent Planet Ltd
         """
@@ -231,8 +230,10 @@ class Net(Tools):
                 recv = res[6].strip(',')
             
             if 'Reply from' in row:    #Reply from 172.22.25.132: bytes=32 time=10ms TTL=247
-                ttl = int(res[-1][4:])
-                delay = int(res[4][5:].strip('ms'))
+                try: ttl = int(res[-1][4:])
+                except: pass
+                try: delay = int(res[4][5:].strip('ms'))
+                except: pass
                 reply = res[2].strip(':')
              
         return ip, count, recv, delay, ttl, reply
@@ -247,19 +248,11 @@ class Net(Tools):
         output is (hostname, aliaslist, ipaddrlist)
         """
         return socket.gethostbyaddr(ip)
-    
-    
-    def socket_get_host_by_name(self, name):
-        """
-        help: Translate a host name to IPv4 address format. The IPv4 address is returned as a string, such as '100.50.200.5'.
-        If the host name is an IPv4 address itself it is returned unchanged.
-        usage: socket_get_host_by_name(name='www.google.co.uk')
-        """
-        return socket.gethostbyname(name)
-        
+         
     
     def dns_rlook(self, ip=''):
         """
+        legacy method
         Reverse DNS lookup
         """
         return socket.gethostbyaddr(ip)[0]
@@ -275,74 +268,55 @@ class Net(Tools):
         
     def dns_look_suffix(self, name, suffix_list):
         """
-        DNS lookup with auto appended suffix
-        will try each entry in the suffix_list
-        until a match is found
+        help: DNS lookup with auto appended suffix
+        will try each entry in the suffix_list until a match is found
+        usage: dns_look_suffix(name='google', suffix_list=['co.uk', 'com'])
+        output is (ip, hostname) - ('216.58.208.35', 'google.co.uk')
         """
-        
         for suffix in suffix_list:
-            res = name.lower() + '.' + suffix
+            res = name + '.' + suffix
             try: return socket.gethostbyname(res), res
             except: pass
             
       
-    def trace(self, ip, name, max_ttl=30):
+    def test_trace(self, ip, ttl=30, verbose=1):
         """
-        Traceroute
-        """
+        help: Traceroute implemented using the icmp method.
+        usage: test_trace(ip='216.58.208.35', ttl=30)
         
+        uses: test_ping(ip, ttl=255, count=1, timeout=300, size=32, verbose=1)
+        return for test ping: (ip, count, recv, delay, ttl, reply)
+        
+        output is a tuple of (ip, dict) dict is key per hop - i.e. 1:{'delay': 1, 'ip': '192.168.1.1', 'name': '', 'reply': '192.168.1.1'} 
+        """
+        max_ttl = ttl
         ttl = 1
-        self.trace_list = []
-        if self.verbose > 0: print 'tracing route to %s  -  %s' % (ip, name)
+        out = {}        
         
         while ttl <= max_ttl:
-            self.test_ping(ip, ttl)
-            hop_ip = self.ping_reply
+            res = self.test_ping(ip=ip, ttl=ttl, count=1, timeout=300, size=32, verbose=0)
+            hop_ip = res[5]
            
             #reverse lookup and second ping to measure delay
-            if hop_ip != '-':
-                host_name = self.dns_rlook(hop_ip)
-                self.test_ping(hop_ip)
-           
-            res = (ttl, self.ping_sent, self.ping_recv, self.ping_delay, self.ping_ttl, hop_ip, host_name)
-            self.trace_list.append(res)
-            if self.verbose > 0:
-                print 'hop %s%s  ttl %s%s  delay %s%s ms  %s [%s]' % (res[0], self.space(res[0], 2), res[4], self.space(res[4], 3), self.space(res[3], 9), res[3], res[6], res[5])
+            if hop_ip:
+                try: host_name = self.dns_rlook(hop_ip)
+                except: host_name = ''
+                res = self.test_ping(ip=hop_ip, ttl=255, count=1, timeout=300, size=32, verbose=0)
+
+            out[ttl] = {}
+            out[ttl]['delay'] = res[3]
+            out[ttl]['ip'] = res[0]
+            out[ttl]['reply'] = res[5]
+            out[ttl]['name'] = host_name
             
-            if ip in hop_ip: return self.trace_list
+            if verbose > 0:
+                print 'hop %d%s  delay %s%sms  [%s]%s %s' % (ttl, self.space(str(ttl), 2), res[3], self.space(res[3], 3), res[0], self.space(res[0], 15) ,host_name)
+            
+            if ip in hop_ip: return ip, out
             ttl += 1
+            
+        return ip, out
            
-           
-    def ping(self, ip='', count=1, ttl=255, timeout=300, size=32):
-        """
-        Ping
-        """
-        if not ip: ip = self.ip
-        
-        sent = recv = exp = 0
-        self.ping_delay_list = []
-        while sent < count:
-            self.test_ping(ip, ttl, 1, timeout, size)
-            if self.ping_delay != 'timed out':
-                if ip not in self.ping_reply: exp += 1    #TTL Expired or Unreachable
-                else: self.ping_delay_list.append(self.ping_delay)
-               
-            sent += 1
-            recv += self.ping_recv
-       
-        try:
-            avg_delay = sum(self.ping_delay_list) / (count - exp)
-            max_delay = max(self.ping_delay_list)
-            min_delay = min(self.ping_delay_list)
-        except: avg_delay = max_delay = min_delay = 0
-       
-        self.ping_res = (ip, sent, recv, avg_delay, min_delay, max_delay)
-       
-        if self.verbose > 0:
-            print '\n %s  sent %s  recv %s  Expired %s  avg %s ms  min %s ms  max %s ms' % (ip, sent, recv, exp, avg_delay, min_delay, max_delay)
-       
-        return self.ping_res   
-       
        
     def scan(self, ip='', port_list=''):
         """Port Scanner"""
