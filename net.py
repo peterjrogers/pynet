@@ -8,7 +8,7 @@ class Net(Tools):
         """
         Network tool kit
         1) Methods from the socket library are presented with descriptions from the man page https://docs.python.org/2/library/socket.html
-        2) ping function using the windows cmd line parse method
+        2) ping function using the windows cmd line parse method.
         
         (c) 2012 - 2015 Intelligent Planet Ltd
         """
@@ -35,7 +35,7 @@ class Net(Tools):
         """
         help: re-initialize the input values for the class
         usage: init_net(ip, name, port)
-        example: init_net(ip='192.168.1.1', name='test', port=23)
+        example: init_net(ip='127.0.0.1', name='test', port=23)
         """
         self.ip = ip
         self.host_name = name
@@ -46,7 +46,7 @@ class Net(Tools):
         """
         help: open a socket with the set timeout and reference as self.sock
         usage: socket_open(port, ip, timeout)
-        example: socket_open(port=23, ip='192.168.1.1', timeout=0.5)
+        example: socket_open(port=23, ip='127.0.0.1', timeout=30)
         output is null for normal operation
         """
         try:
@@ -72,7 +72,7 @@ class Net(Tools):
         help: Return the timeout in seconds (float) associated with socket operations, or None if no timeout is set.
         usage: socket_get_timeout()
         """
-        try: return socket.gettimeout()
+        try: return self.sock.gettimeout()
         except socket.error, e: return (self.error, 'socket_get_timeout', e)
         
         
@@ -183,11 +183,12 @@ class Net(Tools):
         """
         help: tcp port test, will open a session to the host / port and return any received data
         usage: test_port(port, ip, send)    #send is optional
-        example: test_port(80, '4.4.4.4')
+        example: test_port(80, '192.168.1.1')
         """
         #open the connection
         error = self.socket_open(port, ip)
         if error: return error
+        time.sleep(self.sleep)
         #send data and return the data read from the socket
         if send:
             self.socket_send(send)
@@ -233,10 +234,29 @@ class Net(Tools):
                 delay = int(res[4][5:].strip('ms'))
                 reply = res[2].strip(':')
              
-        print (ip, count, recv, delay, ttl, reply)
         return ip, count, recv, delay, ttl, reply
        
        
+    def socket_get_host_by_addr(self, ip):
+        """
+        help: Return a triple (hostname, aliaslist, ipaddrlist) where hostname is the primary host name responding to the given ip_address,
+        aliaslist is a (possibly empty) list of alternative host names for the same address, 
+        and ipaddrlist is a list of IPv4/v6 addresses for the same interface on the same host (most likely containing only a single address)
+        usage: socket_get_host_by_addr(ip='173.194.67.94')
+        output is (hostname, aliaslist, ipaddrlist)
+        """
+        return socket.gethostbyaddr(ip)
+    
+    
+    def socket_get_host_by_name(self, name):
+        """
+        help: Translate a host name to IPv4 address format. The IPv4 address is returned as a string, such as '100.50.200.5'.
+        If the host name is an IPv4 address itself it is returned unchanged.
+        usage: socket_get_host_by_name(name='www.google.co.uk')
+        """
+        return socket.gethostbyname(name)
+        
+    
     def dns_rlook(self, ip=''):
         """
         Reverse DNS lookup
@@ -246,6 +266,7 @@ class Net(Tools):
    
     def dns_look(self, name=''):
         """
+        legacy method
         Normal DNS lookup
         """
         return socket.gethostbyname(name)
