@@ -294,15 +294,17 @@ class Net(Tools):
         out = {}        
         
         while ttl <= max_ttl:
+            #get the ip of the hop count equal to ttl
             res = self.test_ping(ip=ip, ttl=ttl, count=1, timeout=300, size=32, verbose=0)
             hop_ip = res[5]
            
             #reverse lookup and second ping to measure delay
             if hop_ip:
-                try: host_name = self.dns_rlook(hop_ip)
+                try: host_name = self.socket_get_host_by_addr(hop_ip)[0]
                 except: host_name = ''
                 res = self.test_ping(ip=hop_ip, ttl=255, count=1, timeout=300, size=32, verbose=0)
 
+            #save the result
             out[ttl] = {}
             out[ttl]['delay'] = res[3]
             out[ttl]['ip'] = res[0]
@@ -318,28 +320,30 @@ class Net(Tools):
         return ip, out
            
        
-    def scan(self, ip='', port_list=''):
-        """Port Scanner"""
-        if not ip: ip = self.ip
-        if not port_list: port_list = self.port_list
-        if 'int' in str(type(port_list)): port_list = [port_list]
-        self.scan_dict = {}
+    def test_scan(self, ip, port_list='', verbose=1):
+        """
+        help: Port Scanner
+        usage: test_scan(ip='127.0.0.1', port_list=[22, 23, 25, 80])
+        output is a tuple with (ip, dict) with port as the dict key- ('127.0.0.1', {22: ('127.0.0.1', 22, 'fail', 'socket_recv___timed out')})
+        """
+        out = {}
        
         for port in port_list:
-            res = self.test_port(port, ip)
-            if 'fail' in res: self.scan_res = (ip, port, res[0], res[1], res[2])
-            else: self.scan_res = (ip, port, 'ok', res)
+            res = self.test_port_front(port, ip)
+            time.sleep(self.sleep)
             
-            if self.verbose > 0: 
-                if 'ok' in self.scan_res[2]: print self.scan_res[1], self.scan_res[2]
-            self.scan_dict[port] = self.scan_res
+            if 'fail' in res: scan_res = (ip, port, 'fail', str(res[1]) + '___' + str(res[2]))
+            else: scan_res = (ip, port, 'ok', res)
             
-        return self.scan_dict
+            out[port] = scan_res
+            if self.verbose > 0: print scan_res
+        return ip, out
         
         
     def get_http_proxy(self, url):
         """
-        web capture via proxy
+        help: web capture via proxy
+        usage: get_http_proxy(url='http://www.google.co.uk')
         """
         try:
             proxy = urllib2.ProxyHandler({'http': self.web_proxy})
@@ -354,7 +358,8 @@ class Net(Tools):
         
     def get_http(self, url):
         """
-        direct web capture
+        help: direct web capture
+        usage: get_http(url='http://www.google.co.uk')
         """
         try: 
             res = urllib2.urlopen(url)
@@ -366,7 +371,8 @@ class Net(Tools):
         
     def get_http_auth(self, url, username, password):
         """
-        direct web capture with username authentication
+        help: direct web capture with username authentication
+        usage: get_http_auth(url='http://www.google.co.uk')
         """
         try:
             request = urllib2.Request(url)
