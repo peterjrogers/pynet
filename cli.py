@@ -399,16 +399,14 @@ class Cli(Tools):
         if 'trace ' in res:    #perform a traceroute
             try:
                 test = self.verify_ip(res[6:])
-                if test: 
-                    out = mnet_con.mt_trace(test[0], 35)
+                if test: self.view(mnet_con.mt_trace(test[0], 35))
             except: pass
             finally: res = ''
             
         if 'scan ' in res:    #perfrom a port scan
             try:
                 test = self.verify_ip(res[5:])
-                if test:
-                    self.view(net_con.scan(test[0]))
+                if test: net_con.test_scan(ip=test[0], port_list=net_con.port_list, verbose=1)
             except: pass
             finally: res = ''
             
@@ -650,7 +648,7 @@ class Cli(Tools):
                     else: print con.test_port(int(port), ip_address)
                     time.sleep(1)
                 
-                else: con.ping(ip_address)
+                else: con.test_ping(ip=ip_address, ttl=255, count=1, timeout=300, size=32, verbose=1)
         except: print 'error'
             
             
