@@ -22,13 +22,8 @@ class Mnet(Net, Tools):
         self.verbose = verbose
         self.maxq = maxq
         
-        self.timeout = 0.2    #
-        self.buffers = 256    #for check_port
-        
-        #test lists
-        #self.ip_list = open('c:/bip_ip.csv').read().split('\n')
-        #self.host_list = open('c:/win7.csv').read().split('\n')
-        
+        self.timeout = 0.2    #TCP Session Timeout
+        self.buffers = 256    #for check_port     
         
         
     def mt_base(self, label, cmd):
@@ -65,7 +60,7 @@ class Mnet(Net, Tools):
         return self.mt_go(port_list)
         
     
-    def mt_ping(self, ip_list, count=1, timeout=300, ttl=30, size=32):    #ping test
+    def mt_ping(self, ip_list, count=1, timeout=300, ttl=30, size=32):    #ping test 
         self.ping_count = count
         self.ping_timeout = timeout
         self.ttl = ttl
@@ -121,92 +116,35 @@ class Mnet(Net, Tools):
         
         
     def trace(self, ttl):
-        """Traceroute"""
-
-        self.ttl = ttl
-
+        """
+        Multithread Traceroute
+        uses: test_ping(ip, ttl=255, count=1, timeout=300, size=32, verbose=0)
+        return for test ping: (ip, count, recv, delay, ttl, reply)
+        
+        output is dict with a key equal to the hop (ttl) - i.e. 1:{'delay': 1, 'ip': '192.168.1.1', 'name': '', 'reply': '192.168.1.1'} 
+        """
         host_name = ''
-        self.test_ping(self.ip)
-        hop_ip = self.ping_reply
-        res = (ttl, self.ping_sent, self.ping_recv, self.ping_delay, self.ping_ttl, hop_ip, host_name)
+        out = {}
         
-        if hop_ip == self.ip: return res
-        
-        if hop_ip == '-': return res
+        #get the ip of the hop count equal to ttl
+        res = self.test_ping(ip=self.ip, ttl=ttl, count=1, timeout=300, size=32, verbose=0)
+        hop_ip = res[5]
         
         #reverse lookup and second ping to measure delay
-        if  self.verbose != -1:
-            res = self.dns_rlook(hop_ip)
-            if res: host_name = res
-            
-            self.ttl = 30
-            self.test_ping(hop_ip)
-            res = (ttl, self.ping_sent, self.ping_recv, self.ping_delay, self.ping_ttl, hop_ip, host_name)
-            
-            if self.verbose > 1:
-                print 'hop %s  ttl %s  delay %s ms  %s [%s]' % (res[0], res[4], res[3], res[6], res[5])
-               
-            return res
+        if hop_ip:
+            try: host_name = self.socket_get_host_by_addr(hop_ip)[0]
+            except: host_name = ''
+            res = self.test_ping(ip=hop_ip, ttl=255, count=1, timeout=300, size=32, verbose=0)
 
-    """    
-    def test_ping(self, ip):    #self.ping_count, self.timeout, self.ttl, self.ip
-        self.ping_sent = self.ping_recv = self.ping_delay = self.ping_reply = self.ping_ttl = 0
-        cmd = "p = Popen('ping -n %s -w %s -i %s -l %s %s', stdout=PIPE)" % (self.ping_count, self.ping_timeout, self.ttl, self.ping_size, ip)
-        exec(cmd)
-        self.ping_reply = '-'
-        self.ping_result = p.stdout.read()
-       
-        m = re.search('Sent = ([0-9]+),', self.ping_result)
-        if m:
-            self.ping_sent = int(m.group(1))
-        m = re.search('Received = ([0-9]+),', self.ping_result)
-        if m:
-            self.ping_recv = int(m.group(1))
-        m = re.search('TTL=([0-9]+)', self.ping_result)
-        if m:
-            self.ping_ttl = int(m.group(1))
-        m = re.search('Reply from ([0-9.]+):', self.ping_result)
-        if m:
-            self.ping_reply = (m.group(1))
-        m = re.search('Minimum = ([0-9]+)ms', self.ping_result)
-        if m:
-            self.ping_delay = int(m.group(1))
-        else:
-            self.ping_delay = 'timed out'
-       
-        if self.verbose > 3: print self.ping_result
-        if self.verbose > 1: print '\nPing statistics for %s\n sent %s  recv %s  delay %s  ttl %s  reply from %s' % (ip, self.ping_sent, self.ping_recv, self.ping_delay, self.ping_ttl, self.ping_reply)
-        return ip, self.ping_sent, self.ping_recv, self.ping_delay, self.ping_ttl, self.ping_reply
-    """
+        #save the result
+        out[ttl] = {}
+        out[ttl]['delay'] = res[3]
+        out[ttl]['ip'] = res[0]
+        out[ttl]['reply'] = res[5]
+        out[ttl]['name'] = host_name
         
-        
-    def test_ping(self, ip, ttl=255, count=1, timeout=300, size=32, verbose=1):
-        """
-        help: ping test function that uses the windows command line ping tool and parses the output text
-        usage: batch test_ping(ip='172.22.25.132', ttl=255, count=1, timeout=300, size=32, verbose=3)
-        output is (ip, sent, recv, delay, ttl, reply)
-        """
-        #run the command
-        cmd = "p = Popen('ping -n %s -w %s -i %s -l %s %s', stdout=PIPE)" % (count, timeout, ttl, size, ip)
-        exec(cmd)
-        
-        #get the result from stout
-        rows = p.stdout.read().split('\n')
-        ttl = '-' ; delay = '-' ; reply = '-' ; recv = '-'
-        #parse the text
-        for row in rows:            
-            res = row.split()
-            
-            if 'Packets:' in row:    #Packets: Sent = 4, Received = 0, Lost = 4 (100% loss),
-                recv = res[6].strip(',')
-            
-            if 'Reply from' in row:    #Reply from 172.22.25.132: bytes=32 time=10ms TTL=247
-                ttl = res[-1][4:]
-                delay = res[4][5:].strip('ms')
-                reply = res[2].strip(':')
-
-        return ip, count, recv, delay, ttl, reply
-        
+        return out
+                     
     
     def check_port(self, ip, port):
         try:
@@ -223,23 +161,12 @@ class Mnet(Net, Tools):
         
     
     def trace_view(self):    #view trace results and return dict
+        #self.out format {1: [{'delay': 1, 'ip': '10.7.86.254', 'name': '', 'reply': '10.7.86.254'}]
         out = {}
         if self.verbose > -1: print 'tracing route to %s' % self.ip
         for key in self.out: 
-            hop = key
-            s_hop = self.space(hop)
-            res = self.out[key]
-            try: delay = res[2]
-            except: delay = 'fail'
-            s_delay = self.space(delay, 10)
-            try: reply = res[4]
-            except: reply = 'fail'
-            s_reply = self.space(reply, 16)
-            try: name = res[5]
-            except: name = 'fail'
-            if self.verbose > -1: print 'hop %s%s delay %s ms%s %s%s %s' % (hop, s_hop, delay, s_delay, reply, s_reply, name)
-            out[hop] = [res]
-            if str(self.ip.lstrip().rstrip()) == str(reply.lstrip().rstrip()): return out
+            out[key] = self.out[key]
+            if self.out[key]['reply'] == self.ip: return out
         return out
         
         
@@ -329,7 +256,7 @@ class Go(threading.Thread):
         """Ping test"""
         
         res = ip, 'fail'
-        try: res = self.mt.test_ping(ip)
+        try: res = self.mt.test_ping(ip, ttl=255, count=1, timeout=300, size=32, verbose=0)
         except: pass
         finally:
             if self.verbose > 2: print res
@@ -345,7 +272,7 @@ class Go(threading.Thread):
         except: pass
         finally:
             if self.verbose > 1: print res
-            self.mt.out[res[0]] = res[1:]
+            self.mt.out[ttl] = res[ttl]
             self.queue.task_done()
 
     
