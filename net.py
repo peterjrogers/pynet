@@ -39,7 +39,7 @@ class Net(Tools):
         """
         self.ip = ip
         self.host_name = name
-        self.port = port
+        self.tcp_port = port
        
        
     def socket_open(self, port, ip, timeout=0.2):
