@@ -14,9 +14,8 @@ class Batch(Tools, Net):
         
         (c) 2012 - 2015 Intelligent Planet Ltd
         """
-        import mnet, net
+        import mnet
         self.mnet_con = mnet.Mnet()
-        self.net_con = net.Net()
         
         self.path = os.getcwd() + '\\'
         self.clear()
@@ -52,9 +51,10 @@ class Batch(Tools, Net):
             'sh mac address-table': ['vlan', 'mac address', 'type', 'ports'],
             'sh mac add ': ['vlan', 'mac address', 'type', 'protocols', 'port'],
             'sh mac-add': ['star', 'vlan', 'mac address', 'type', 'learn', 'age', 'ports'],
-            'sh int desc': ['Interface', 'Status', 'Protocol', 'Description'],
+            'sh int desc': ['interface', 'status', 'protocol', 'description'],
             'sh ver': ['hostname', 'serial_number', 'reload_cause'],
-            'sh cdp n d': ['hostname', 'ip', 'interface', 'port']
+            'sh cdp n d': ['hostname', 'ip', 'interface', 'port'],
+            'sh ip int brief': ['interface', 'ip-address', 'ok?', 'method', 'status', 'protocol']
         }
         
         #describe the matching rule format to identify valid output - i.e. match word in pos
@@ -68,7 +68,8 @@ class Batch(Tools, Net):
             'ios': ['uptime', 0, 'processor board id', 3, 'system returned to rom by', 5],
             'catos': ['sh ver', 0, 'hardware version:', -1, 'system returned to rom by', 5],
             'nxos': ['device name', 2, 'processor', 3, 'reason:', 1],
-            'sh cdp n d': ['device id', 2, 'ip address', 2, 'interface:', 1, 'port id', 6]
+            'sh cdp n d': ['device id', 2, 'ip address', 2, 'interface:', 1, 'port id', 6],
+            'sh ip int brief': ['yes', 2]
         }
     
     
@@ -80,6 +81,11 @@ class Batch(Tools, Net):
         self.cmd_transform['sh mac add '] = ['star', 'vlan', 'mac address', 'type', 'age', 'secure', 'ntfy', 'port']
         self.cmd_rules['sh mac add '] = ['dynamic', 3]
         self.cmd_rules['sh cdp n d'] = ['system name:', 2, 'ipv4 address', 2, 'interface:', 1, 'port id', 6]
+        self.cmd_transform['sh ip int brief'] = ['interface', 'ip-address', 'status']
+        self.cmd_rules['sh ip int brief'] = ['protocol-up/link-up/admin-up', 2]
+        self.cmd_transform['sh int desc'] = ['port', 'type', 'speed', 'description']
+        self.cmd_rules['sh int desc'] = ['eth', 1]
+        
     
     
     def init_ios(self):
@@ -231,22 +237,27 @@ class Batch(Tools, Net):
         """
         help: Run a multi threaded trace route and store the result in trace_dict
         example: batch trace
-        mt_trace output is {1: [(self.ping_sent, self.ping_recv, self.ping_delay, self.ping_ttl, hop_ip, host_name)]}
+        mt_trace output is self.trace_dict[ip] {1: [{'delay': 1, 'ip': '10.7.86.254', 'name': '', 'reply': '10.7.86.254'}]
         """
-        
         self.make_ip_list()
-        
-        for ip in self.ip_list:
-            res = self.mnet_con.mt_trace(ip, ttl=self.ttl)
-            print res
-            if res:
-                try:
-                    pent_index = len(res) - 1
-                    self.pent_hop = res[pent_index][0][4]
-                    self.trace_dict[ip] = {}
-                    self.trace_dict[ip]['output'] = res
-                    self.trace_dict[ip]['pent_hop'] = self.pent_hop
-                except: pass
+        for ip in self.ip_list: self.trace_func(ip)
+            
+            
+    def trace_func(self, ip):
+        """
+        help: Run a multi threaded trace route for a specified ip and store the result in trace_dict
+        example: batch trace_func(ip='172.22.25.132')
+        mt_trace output is self.trace_dict[ip] {1: [{'delay': 1, 'ip': '10.7.86.254', 'name': '', 'reply': '10.7.86.254'}]
+        """
+        res = self.mnet_con.mt_trace(ip, ttl=self.ttl)
+        self.view(res)
+        try:
+            pent_index = res.keys()[-2]
+            self.pent_hop = res[pent_index]['ip']
+            self.trace_dict[ip] = {}
+            self.trace_dict[ip]['output'] = res
+            self.trace_dict[ip]['pent_hop'] = self.pent_hop
+        except: pass
                 
    
     def rlook(self):
@@ -313,7 +324,7 @@ class Batch(Tools, Net):
         self.make_ip_list()
         for ip in self.ip_list:
             print 'trying port %d on %s' % (self.tcp_port, ip)
-            res = self.net_con.test_port_front(self.tcp_port, ip)
+            res = self.test_port_front(self.tcp_port, ip)
             if self.verbose > 0: print res
             self.port_dict[ip] = res
             time.sleep(self.sleep)    #use 0.5 to 1 sec to avoid firewall blocks based on tcp session limit / sec
@@ -397,7 +408,7 @@ class Batch(Tools, Net):
         rule_txt = self.cmd_rules[cmd_key][0]
         rule_pos = self.cmd_rules[cmd_key][1]
         if verbose > 1: print transform
-        if verbose > 1: print rule_txt
+        if verbose > 1: print rule_txt, rule_pos
         out = []
         self.vty_connect(ip=ip, host=host, cmd=cmd, verbose=1)
         if len(self.vty_out) == 1: self.vty_out = self.vty_out[0]    #telnet format fix
@@ -460,7 +471,6 @@ class Batch(Tools, Net):
         return self.vty_parse_list(transform, cmd_transform)
         
         
-
     def vty_parse_list(self, transform, cmd_transform, verbose=1):
         """
         Parse a list of data using the data definition in transform
@@ -557,8 +567,16 @@ class Batch(Tools, Net):
         
         #int desc tests
         batch vty test cmd sh int desc,107.22.28.6
+        batch vty test cmd sh int desc,107.15.148.1    #nxos
+        
+        
+        #ip int brief tests
+        batch vty test cmd sh ip int brief,172.22.25.132
+        batch vty sh ver 107.15.148.1
+        batch vty test cmd sh ip int brief vrf all,107.15.148.1    #nxos
+        
         """
-        return self.vty_parse(ip=ip, host='', cmd=cmd, verbose=1)
+        return self.vty_parse(ip=ip, host='', cmd=cmd, verbose=2)
         
         
     def vty_sh_int_desc(self, ip):
@@ -577,7 +595,9 @@ class Batch(Tools, Net):
         """
         help: fixed width parsing based on recording the starting index position of the column label
         usage: batch vty_fixed_width_parse(ip, cmd)
-        example: batch vty_fixed_width_parse(ip='172.22.25.132', cmd='sh int desc', verbose=3)
+        example: batch vty_fixed_width_parse(ip='172.22.25.132', cmd='sh int desc', verbose=1)
+        example: batch vty sh ver 107.15.148.1
+        example: batch vty_fixed_width_parse(ip='107.15.148.1', cmd='sh int desc', verbose=1)
         
         example column label: Interface                      Status         Protocol Description
         example transform: ['Interface', 'Status', 'Protocol', 'Description']
@@ -590,6 +610,9 @@ class Batch(Tools, Net):
         transform = self.cmd_transform[cmd_key]
         if verbose > 1: print transform
         
+        cmd_txt = self.cmd_rules[cmd_key][0]
+        if verbose > 1: print cmd_txt
+        
         self.vty_connect(ip=ip, host='', cmd=cmd, verbose=1)
         if verbose > 2: print self.vty_out
         
@@ -597,10 +620,12 @@ class Batch(Tools, Net):
         if verbose > 1: print transform_rules
         
         row_num = 0
-        for row in self.vty_out:
+        for rows in self.vty_out:
+            row = rows.lower()
             if verbose > 2: print row
             if row == self.transform_label: continue    #ignore the column label
             if len(row) < len(self.transform_label): continue    #ignore too short
+            if cmd_txt not in row: continue    #invalid row
             try:
                 
                 pos = 0
@@ -626,10 +651,11 @@ class Batch(Tools, Net):
                 row_num += 1
             except: pass
 
+        if verbose > 0: print out
         return out
         
         
-    def vty_transform_index(self, transform, verbose=1):
+    def vty_transform_index(self, transform, verbose=3):
         """
         help: find the starting index positions for the item in the transform list
         usage: batch vty_transform_index(transform, verbose=2)
@@ -638,18 +664,17 @@ class Batch(Tools, Net):
         """
         out = {}
         for rows in self.vty_out:
-            if verbose > 2: print rows
-            if transform[0] in rows:
+            row = rows.lower()
+            if verbose > 2: print row
+            if transform[0] in row:
                 try: 
                     for item in transform:
-                        if verbose > 1: print item, rows.index(item)
-                        out[item] = rows.index(item)    #get the start point for each item
-                    self.transform_label = rows    #record the column label so it can be identified by the parser
+                        if verbose > 1: print item, row.index(item)
+                        out[item] = row.index(item)    #get the start point for each item
+                    self.transform_label = row    #record the column label so it can be identified by the parser
                     return out
                 except: pass
-        
-                
-        
+          
         
     def help(self):
         """
@@ -679,7 +704,6 @@ class Batch(Tools, Net):
             #except: pass
             
         
-  
     def batch_vty(self):
         """
         help: perform command(s) on multiple hosts
