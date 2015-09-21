@@ -77,14 +77,13 @@ class Vty(Tools):
     def trim_more(self, line):
         """ Strip out --More-- and \x08 from telnet output """
         try:
-            try: 
-                pos = line.index(self.more)
-                start = pos + len(self.more)
-            except: start = 0
+            #try: 
+            #    pos = line.index(self.more)
+            #    start = pos + len(self.more)
+            #except: start = 0
             out = ''
-            for item in line[start:]:
-                if ord(item) != 8: 
-                    if item: out += item
+            for item in line:
+                if ord(item) != 8: out += item
             return out
             
         except: return line
@@ -100,6 +99,7 @@ class Vty(Tools):
             out += '\r\n'
             res = self.telcon.expect(self.telnet_banner_list, self.telnet_cmd_timeout)
             #print res
+            #out += res[2]
             out += self.trim_more(res[2])
        
         #if self.verbose > 0: print out
@@ -124,7 +124,7 @@ class Vty(Tools):
         self.telnet_init()
         res = self.telcon.read_until('zzz', 1)
         if not res: return
-        bt_host = ['san-b', 'san-h', 'san-t', 'ab-h', 'san-d', 'ab-bbg', 'alg-1004', 'alg-1002', 'alg-1003', 'alg-1004', 'alg-1005', 'alg-1009', 'alg-101']
+        bt_host = []
         bt_banner = [' bt ', 'british', 'telecommunications', 'bt', 'british', 'telecommunications']
         prod_banner = ['prod', 'grupo']
         
