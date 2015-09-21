@@ -254,9 +254,10 @@ class Batch(Tools, Net):
         try:
             pent_index = res.keys()[-2]
             self.pent_hop = res[pent_index]['ip']
-            self.trace_dict[ip] = {}
-            self.trace_dict[ip]['output'] = res
-            self.trace_dict[ip]['pent_hop'] = self.pent_hop
+            out = {}
+            out['output'] = res
+            out['pent_hop'] = self.pent_hop
+            return out
         except: pass
                 
    
@@ -699,9 +700,8 @@ class Batch(Tools, Net):
         else:
             if ')' not in cmd: cmd += '()'
             print 'executing self.' + cmd
-            #try: 
-            exec('print self.' + cmd)
-            #except: pass
+            try: exec('print self.' + cmd)
+            except: pass
             
         
     def batch_vty(self):
