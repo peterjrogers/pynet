@@ -1,6 +1,6 @@
 import pickle, sys, os
 from mac import Mac
-from mnet import Mnet
+from mnet2 import Mnet
 
 
 class Arp(Mnet, Mac):
@@ -34,7 +34,7 @@ class Arp(Mnet, Mac):
         self.path = os.getcwd() + '\\'
         self.cfile = self.path +  'r++'
         self.db_file = self.path + 'arp_db'
-        self.mping_load_file = '//an/produban/Systems/Comms/Network Operations\Software\Multi Ping 1 & 2\R++ load.txt'
+        self.mping_load_file = 'R++ load.txt'
         self.ip_index = {}
         self.mac_index = {}
         self.name_index = {}
@@ -122,38 +122,6 @@ class Arp(Mnet, Mac):
             entry = self.arp_dict[key][interface][ip_mac][field]
             print field.capitalize(), self.space(field, 12), entry
     
-    
-    """
-    def search_mac(self, mac):
-        res = [x for x in self.name_index.keys() if mac in x]    #check for dns_entries
-        if res: 
-            out = []
-            for key in res: out.append(self.name_index[key])
-            return out
-        
-        return [x for x in self.mac_index.keys() if mac in x]
-        
-    
-    def return_record(self, mac_key):
-        out = {}
-        res = self.mac_index[mac_key]
-        dicts = self.arp_dict[res[0]][res[1]][mac_key]
-        out['Branch'] = res[0]
-        out['Interface'] = res[1]
-        out['MAC'] = mac_key.split('_')[1]
-        for item in dicts:
-            out[item.capitalize()] = dicts[item]
-            
-        return out
-
-    
-    def view_records(self, mac):    #view records for searched dns name, mac or ip address
-        res = self.search_mac(mac)
-        for mac_key in res:
-            self.view(self.return_record(mac_key))
-            print
-    """
-    
         
     def load_arp(self):    #load a csv file and return a list
         import csv
@@ -162,7 +130,7 @@ class Arp(Mnet, Mac):
         if self.verbose > 0: print 'Analysing arp entries'
         
         for row in reader:
-            if row:
+            try:
                 ip = ''
                 rows = row[0]
                 
@@ -224,7 +192,7 @@ class Arp(Mnet, Mac):
                     self.mac_index[ip_mac] = (branch, interface)
                     
                     if self.verbose < 2: sys.stdout.write('.')
-                   
+            except: pass
         print '\n'
         
         
