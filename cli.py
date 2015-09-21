@@ -92,7 +92,7 @@ class Cli(Tools):
         print "%s records loaded for %s devices" % (self.total_records, self.total_hosts)
         
         out = []
-        view_list = []
+        self.view_list = []
         
         while True:
             res = raw_input(self.search_txt)
@@ -110,9 +110,9 @@ class Cli(Tools):
                     print self.level_7.__doc__    #common tools
                     res = ''
                
-                if res == '?':    #print each item in the view_list
+                if res == '?':    #print each item in the self.view_list
                     try: 
-                        for item in view_list: print item.upper()
+                        for item in self.view_list: print item.upper()
                     except: pass
                     res = ''
 
@@ -143,7 +143,7 @@ class Cli(Tools):
                         #print http_data
                         self.viewwhois(http_data)
                         ip_string = res[6:]
-                        print '\nRule to block this host on RT03PBLYINET01\nip route %s 255.255.255.255 192.0.2.1 tag 666' % ip_string
+                        print '\nRule to block this host on \nip route %s 255.255.255.255 192.0.2.1 tag 666' % ip_string
                         send = 'echo %s| clip' % auth_con.enable_password
                         self.send_clip(send)
                     except: pass
@@ -152,9 +152,9 @@ class Cli(Tools):
                     
                 if 'ehealth ' in res:    #run an ehealth report conversion
                     if 'internet' in res:    #fetch the data for Peter Ortlepp's report
-                        url = 'http://22.98.33.26/users/guest/myHealth/myHealth.csv'
-                        username = 'guest'
-                        password = 'guest'
+                        url = 'http:///users/guest/myHealth/myHealth.csv'
+                        username = ''
+                        password = ''
                     else: 
                         ehealth_split = res_copy.split(' ')    #keep the char case
                         if len(ehealth_split) != 4: 
@@ -200,10 +200,10 @@ class Cli(Tools):
                 if res:    
                     """
                     If res did not match a command then perform a host search and return
-                    a view_list if more than on host matches.
-                    The view_list can then be used to specify batch host targets
+                    a self.view_list if more than on host matches.
+                    The self.view_list can then be used to specify batch host targets
                     """                    
-                    view_list = self.host_search(res)
+                    self.view_list = self.host_search(res)
                     res = ''
                     
                 
@@ -384,6 +384,10 @@ class Cli(Tools):
             ports_con.find_port(res[6:])
             res = ''
             
+        if 'pings alert' in res:
+            self.ping_alert()
+            res = '' 
+            
         if 'ping ' in res:    #perform a ping or port ping test by specifying the ip address and port if required
             self.ping_tool(res[5:])
             res = ''
@@ -425,6 +429,88 @@ class Cli(Tools):
             except: print 'fail - hex only'
             finally: res = ''
             
+            
+        if 'cidr find ' in res:
+            try:
+                path = os.getcwd() + '/'
+                in_file = path + 'in.txt'
+                input = open(in_file, 'rU')
+                for line in input:
+                    try: addr = line.split(',')[0]
+                    except: addr = line
+                    cidr = addr.lstrip().rstrip()
+                    cidr_net = ipcalc.Network(cidr)
+                    if cidr_net.check_collision(res[10:]): print line ; return
+            except: pass
+            finally: res = ''
+                
+            
+        if 'cidr in' in res:
+            #Lookup the first and last address details for cidr subnets input is 1.1.1.0/24
+            path = os.getcwd() + '/'
+            in_file = path + 'in.txt'
+            out_file = path + 'out.txt'
+            input = open(in_file, 'rU')
+            output = open(out_file, 'w')
+            output.write('cidr, first, last, network_long, broadcast_long\n')
+            for line in input:
+                try: addr = line.split(',')[0]
+                except: addr = line
+                cidr = addr.lstrip().rstrip()
+                cidr_net = ipcalc.Network(cidr)
+                line = '%s,%s,%s,%s,%s\n' % (cidr, cidr_net.host_first(), cidr_net.host_last(), cidr_net.network_long(), cidr_net.broadcast_long())
+                output.write(line)
+            output.close()
+            res = ''
+            
+            
+        if 'cidr sort' in res:
+            #Site ID,Location,Postcode,BT Management Subnet,BT Management Mask,Voice Subnet,Voice Mask,Data Subnet,Data Mask,IP ATM Subnet,IP ATM Mask
+            #B0002,Moorgate,,172.22.30.96,255.255.255.252,10.180.1.0,255.255.255.128,10.144.22.0,255.255.255.0,10.67.0.16,255.255.255.240
+            #sort BT subnet list into standard listing
+            path = os.getcwd() + '/'
+            in_file = path + 'in.txt'
+            out_file = path + 'out.txt'
+            input = open(in_file, 'rU')
+            output = open(out_file, 'w')
+            for line in input:
+                row = line.split(',')
+                site_id = row[0]
+                location = row[1]
+                postcode = row[2]
+                man_label = site_id + '_' + location + '_management_subnet'
+                man_ip = row[3]
+                man_mask = row[4]
+                voice_label = site_id + '_' + location + '_voice_subnet'
+                voice_ip = row[5]
+                voice_mask = row[6]
+                data_label = site_id + '_' + location + '_data_subnet'
+                data_ip = row[7]
+                data_mask = row[8]
+                atm_label = site_id + '_' + location + '_atm_subnet'
+                atm_ip = row[9]
+                atm_mask = row[10].rstrip()
+                
+                if man_ip:
+                    out = '%s,%s,%s\n' % (man_label, man_ip, man_mask)
+                    output.write(out)
+                
+                if voice_ip:
+                    out = '%s,%s,%s\n' % (voice_label, voice_ip, voice_mask)
+                    output.write(out)
+                
+                if data_ip:
+                    out = '%s,%s,%s\n' % (data_label, data_ip, data_mask)
+                    output.write(out)
+                
+                if atm_ip:
+                    out = '%s,%s,%s\n' % (atm_label, atm_ip, atm_mask)
+                    output.write(out)
+                    
+            output.close()
+            res = ''
+                
+                            
         if 'cidr ' in res:    #cidr calculator
             try: 
                 cidr_net = ipcalc.Network(res[5:])
@@ -442,11 +528,22 @@ class Cli(Tools):
         if 'telnet ' in res:
             try: 
                 ip_address = res[7:]
-                self.vty_method(ip_address, ip_address)
+                t_path = os.getcwd() +'\\'
+                t_cmd = '%sputty -telnet %s' % (t_path, ip_address)
+                Popen(t_cmd)
             except: pass
             finally: res = ''
             
         if 'ssh ' in res:
+            try: 
+                ip_address = res[4:]
+                t_path = os.getcwd() +'\\'
+                t_cmd = '%sputty -ssh %s' % (t_path, ip_address)
+                Popen(t_cmd)
+            except: pass
+            finally: res = ''
+            
+        if 'tty ' in res or 'vty ' in res:
             try: 
                 ip_address = res[4:]
                 self.vty_method(ip_address, ip_address)
@@ -650,6 +747,38 @@ class Cli(Tools):
                 
                 else: con.test_ping(ip=ip_address, ttl=255, count=1, timeout=300, size=32, verbose=1)
         except: print 'error'
+        
+    def ping_alert(self):
+        """
+        Read the alert from alert.txt and split the below line to extract the FQDN
+        """
+        test_list = []
+        name_list = []
+        con = net.Net()
+        cfile = os.getcwd() + '\\' + 'alert.txt'
+        os.system(cfile)
+        lines = open(cfile, 'rU')
+        for line in lines:
+            ip = ''
+            if 'Ping failed' in line:
+                ip = line.split()[3].strip(',')
+                
+            if len(line.split()) == 1:
+                ip_name = line.split()[0].lstrip().rstrip()
+                if ip_name not in name_list:
+                    #perfrom db or dns lookup
+                    test = self.verify_ip(ip_name)
+                    if test: 
+                        ip = test[0]
+                        name = test[1]
+                        name_list.append(ip_name)
+                        if ip in test_list: print '============================================= \n'
+                
+            if ip:
+                if ip not in test_list:
+                    test_list.append(ip)
+                    con.test_ping(ip=ip, ttl=255, count=1, timeout=300, size=32, verbose=1)
+                    print '============================================= \n'
             
             
     def start_http(self, protocol, url):
