@@ -1,6 +1,8 @@
 import socket, re, time, urllib2, base64
 from subprocess import Popen, PIPE
 from tools import Tools
+import win32com.client
+
 
 class Net(Tools):
     def __init__(self, ip='192.168.1.10', name='test', port=23, verbose=1):
@@ -21,7 +23,9 @@ class Net(Tools):
         self.recv_buffer = 1024
         self.error = 'fail'
         
-        self.web_proxy = '172.19.193.122'
+        #self.web_proxy = '172.19.193.122'    #exec
+        #self.web_proxy = '107.15.42.4'    #dia2
+        self.web_proxy = 'http://dia2.santanderuk.gs.corp:8080'
        
         self.port_list = [20, 21, 22, 23, 25, 53, 67, 68, 69, 80, 161, 162, 179, 443, 520, 1719, 1720, 1985, 1998, 2000, 2427, 3389, 5060, 5900, 8080]
         #FTP(20, 21), SSH(22), Telnet(23), SMTP(25), DNS(53), DHCP(67, 68), TFTP(69), HTTP(80), SNMP(161, 162), BGP(179), HTTPS(443), RIP(520)
@@ -340,12 +344,20 @@ class Net(Tools):
         return ip, out
         
         
-    def get_http_proxy(self, url):
+    def get_http_proxy(self, url, username='test', password='me'):
         """
         help: web capture via proxy
         usage: get_http_proxy(url='http://www.google.co.uk')
+        28/03/2016 - Proxy methods no longer work
         """
         try:
+            #password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
+            #password_mgr.add_password(None, self.web_proxy, username, password)
+            #auth_handler = urllib2.HTTPBasicAuthHandler(password_mgr)
+            
+            #opener = urllib2.build_opener(auth_handler)
+            #urllib2.install_opener(opener)
+            
             proxy = urllib2.ProxyHandler({'http': self.web_proxy})
             opener = urllib2.build_opener(proxy)
             urllib2.install_opener(opener)
@@ -381,6 +393,28 @@ class Net(Tools):
             return urllib2.urlopen(request)
         except urllib2.HTTPError, e: return e.code, e.msg, e.url, e.read()
         except urllib2.URLError, e: return 0, 'url error', url, e.reason
+        
+        
+    def get_http_ie(self, url, visible=0):
+        """
+        help: web capture via internet explorer
+        usage: get_http_ie(url, visible=0)
+        """
+        try:
+            ie = win32com.client.Dispatch("InternetExplorer.Application")
+            ie.Visible = visible
+            ie.Navigate(url)
+            #while ie.Busy: time.sleep(0.1)
+            while ie.ReadyState != 4: time.sleep(0.01)
+	
+            res = ie.Document.body.innerHTML
+            res = unicode(res)
+            res = res.encode('ascii','ignore')
+
+            ie.Quit()
+            return res
+       
+        except: pass
         
         
            
