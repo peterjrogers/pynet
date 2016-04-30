@@ -1,12 +1,16 @@
-import sys, time, macs, device, contact, mac, cache_flow, arps, ports, pynet, auth
+import sys, time, macs, device, contact, mac, cache_flow, arps, ports, pynet, auth, netflow
 import net, os, mnet, vty, session, batch, ipcalc, pyputty, shutil, getpass
 from subprocess import Popen, PIPE
 from tools import Tools
+from geopy.distance import vincenty
+
 try: 
     import pygeoip
     path = os.getcwd() + '\\'
     cfile = path + 'GeoLiteCity.dat'
-    gi = pygeoip.GeoIP(cfile)
+    gip = pygeoip.GeoIP(cfile)
+    cfile = path + 'GeoIPASNum.dat'
+    gip_asn = pygeoip.GeoIP(cfile)
 except: pass
 
 mac_con = macs.Macs()
@@ -19,6 +23,7 @@ mnet_con = mnet.Mnet()
 net_con = net.Net()
 auth_con = auth.Auth()
 auth_con.auth_enable()    #load the enable password
+netflow_con = netflow.Inetflow()
 
 
 decrypt=lambda x:''.join([chr(int(x[i:i+2],16)^ord('dsfd;kfoA,.iyewrkldJKDHSUBsgvca69834ncxv9873254k;fg87'[(int(x[:2])+i/2-1)%53]))for i in range(2,len(x),2)])    #http://packetstormsecurity.com/files/author/7338/
@@ -133,28 +138,64 @@ class Cli(Tools):
                     if batch_out: print batch_out
                     res = ''
                     
+                if 'netflow ' in res:    #perfrom operations on internet netflow data
+                    if 'load' in res: print netflow_con.load()
+                    if 'view db' in res: netflow_con.view_db()
+                    if 'view as ' in res: netflow_con.view_as(res[16:])
+                    if 'view stats' in res: netflow_con.view_stats()
+                    if 'metric ' in res: netflow_con.metric_as(res[15:])
+                    if 'blackhole' in res: netflow_con.load_blackhole()
+                    res = ''
+                    
+                if 'netflow.' in res: 
+                    netflow_con.run(res_copy[8:])
+                    res = ''
+                    
                 if 'whois ' in res:
                     try:
-                        url = 'http://www.whois.com/whois/' + res[6:]
+                        url = 'www.whois.com/whois/' + res[6:]
                         print url
-                        http_data = net_con.get_http(url)[3]
-                        if not http_data:
-                            http_data = net_con.get_http_proxy(url)[3]
+                        #protocol='http'
+                        #cmd = 'start %s://%s' % (protocol, url)
+                        #os.system(cmd)
+                        #http_data = net_con.get_http(url)[3]
+                        #http_data = net_con.get_http_proxy(url)[3]
+                        http_data = net_con.get_http_ie(url)
+                        
                         #print http_data
                         self.viewwhois(http_data)
-                        ip_string = res[6:]
-                        print '\nRule to block this host on \nip route %s 255.255.255.255 192.0.2.1 tag 666' % ip_string
-                        send = 'echo %s| clip' % auth_con.enable_password
+                        #ip_string = res[6:]
+                        print '\nRule to block this host on RT03PBLYINET01\nip route %s 255.255.255.255 192.0.2.1 tag 666' % res[6:]
+                        send = 'echo %s| clip' % 'RT03PBLYINET01'
                         self.send_clip(send)
+                        
+                        print '\nGeoIP Lookup\n'
+                        out = gip.record_by_addr(res[6:])
+                        self.view(out)
+                        asn = gip_asn.asn_by_addr(res[6:])
+                        asn= asn.split(' ')[0]
+                        print 'AS#: ', asn
+                        netflow_con.view_as(asn)
+                        print
+                        #netflow_con.view_stats()
+                        #print
+                        netflow_con.metric_as(asn)
+                        print
+                        try:
+                            Shenley = (52.0175, -0.7896)
+                            gip_city = (out['latitude'], out['longitude'])
+                            print 'Distance (Miles) ', int(vincenty(Shenley, gip_city).miles)
+                        except: pass
+                        
                     except: pass
                     finally: res = ''
                     
                     
                 if 'ehealth ' in res:    #run an ehealth report conversion
                     if 'internet' in res:    #fetch the data for Peter Ortlepp's report
-                        url = 'http:///users/guest/myHealth/myHealth.csv'
-                        username = ''
-                        password = ''
+                        url = 'http://22.98.33.26/users/guest/myHealth/myHealth.csv'
+                        username = 'guest'
+                        password = 'guest'
                     else: 
                         ehealth_split = res_copy.split(' ')    #keep the char case
                         if len(ehealth_split) != 4: 
@@ -188,10 +229,8 @@ class Cli(Tools):
                 
                 if 'http' in res:    #get data via http
                     try:
-                        if 'prohttp' in res: http_data = net_con.get_http_proxy(res[3:])
-                        else: http_data = net_con.get_http(res)
-                        self.view_http(http_data[3])
-                        print 'status code %d    status msg %s    url %s' % (http_data[0], http_data[1], http_data[2])
+                        http_data = net_con.get_http_ie(res)
+                        self.view_http(http_data)
                     except: pass
                     finally: res = ''
                     
@@ -253,11 +292,11 @@ class Cli(Tools):
             
             if '@bip' in q: self.cmd_list = ['sh ip bgp sum | beg Neigh', 'sh controller vdsl 0/0/0 | inc dB|Speed|Reed|Err', 'sh controller vdsl 0/1/0 | inc dB|Speed|Reed|Err'] ; q = '@cmd'
             
-            if '@mac' in q: q = '%sh mac-add dyn'
+            if '@mac' in q: q = 'sh mac-add dyn'
             
             if '@cache' in q: q = '%sh ip cache flow'
             
-            if '@nex_mac' in q: q = '%sh mac address-table dynamic'
+            if '@nex_mac' in q: self.cmd_list = ['sh mac address-table dynamic'] ; q = '@cmd' 
             
             if '@x25' in q: self.cmd_list = ['sh x25 rou','sh x25 vc | inc Interface|Started|Connects'] ; q = '@cmd'
             
@@ -520,8 +559,14 @@ class Cli(Tools):
             
         if 'geoip ' in res:    #Internet GeIP lookup
             try:
-                out = gi.record_by_addr(res[6:])
+                out = gip.record_by_addr(res[6:])
+                #city level DB output format is a dict as below
+                #{'city': u'Canterbury', 'region_code': u'G5', 'area_code': 0, 'time_zone': 'Europe/London', 'dma_code': 0, 'metro_code':
+                # None, 'country_code3': 'GBR', 'latitude': 51.30680000000001, 'postal_code': u'CT2', 'longitude': 1.0430000000000064, 'c
+                #ountry_code': 'GB', 'country_name': 'United Kingdom', 'continent': 'EU'}
                 self.view(out)
+                #ASN level DB output format is a single string - u'AS13285 TalkTalk Communications Limited'
+                print 'AS#: ', gip_asn.asn_by_addr(res[6:])
             except: pass
             finally: res = ''
             
@@ -599,6 +644,10 @@ class Cli(Tools):
             try: return con.dns_look(ip), ip
             except: pass
         
+        #perfrom a db lookup
+        res = self.search_db(ip)
+        if res: return res    #db search produced a unique match
+        
         #resolve host name using dns suffix list
         res = con.dns_look_suffix(ip, self.dns_suffix)
         if res: 
@@ -606,9 +655,7 @@ class Cli(Tools):
             try: return res[0], con.dns_rlook(res[0])
             except: return res[0], res[0]
             
-        #perfrom a db lookup
-        res = self.search_db(ip)
-        if res: return res    #db search produced a unique match
+        
         
         #perform an arp lookup
         res = self.arp_con.search_ip(ip)
