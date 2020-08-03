@@ -23,9 +23,9 @@ class Net(Tools):
         self.recv_buffer = 1024
         self.error = 'fail'
         
-        #self.web_proxy = '172.19.193.122'    #exec
-        #self.web_proxy = '107.15.42.4'    #dia2
-        self.web_proxy = 'http://dia2.santanderuk.gs.corp:8080'
+        #self.web_proxy = '' 
+        #self.web_proxy = ''   
+        self.web_proxy = ''
        
         self.port_list = [20, 21, 22, 23, 25, 53, 67, 68, 69, 80, 161, 162, 179, 443, 520, 1719, 1720, 1985, 1998, 2000, 2427, 3389, 5060, 5900, 8080]
         #FTP(20, 21), SSH(22), Telnet(23), SMTP(25), DNS(53), DHCP(67, 68), TFTP(69), HTTP(80), SNMP(161, 162), BGP(179), HTTPS(443), RIP(520)
@@ -286,7 +286,7 @@ class Net(Tools):
     def test_trace(self, ip, ttl=30, verbose=1):
         """
         help: Traceroute implemented using the icmp method.
-        usage: test_trace(ip='216.58.208.35', ttl=30)
+        usage: test_trace(ip='', ttl=30)
         
         uses: test_ping(ip, ttl=255, count=1, timeout=300, size=32, verbose=1)
         return for test ping: (ip, count, recv, delay, ttl, reply)
